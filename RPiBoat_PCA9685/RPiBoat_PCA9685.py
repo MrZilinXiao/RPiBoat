@@ -7,29 +7,53 @@ import traceback
 import threading
 import os
 import sys
-#import re
-#import subprocess
+# import re
+# import subprocess
 from pi_pwm_for_PCA9685 import PiPWM
 
 timer_interval = 2
 
 controller_ip = "192.168.10.240"
 
+
+class get_position_loop(threading.Thread):
+    def __init__(self):
+        print "Getting Position..."
+        threading.Thread.__init__(self)
+
+    def run(self):
+        while True:
+            port = "/dev/ttyAMA0"
+            ser = serial.Serial(port, baudrate=9600, timeout=0.5)
+            dataout = pynmea2.NMEAStreamReader()
+            newdata = ser.readline()
+
+            print ("Getting Lat and Lng...")
+
+            if newdata[0:6] == "$GPGGA":
+                newmsg = pynmea2.parse(newdata)
+                lat = newmsg.latitude
+                lng = newmsg.longtitude
+                MyStreamRequestHandlerr.wfile.write("GPS," + lat + "," + lng)
+                time.sleep(10)
+
+
 class ConnectionWatcher(threading.Thread):
     def __init__(self):
         print "Connection Checker Loading..."
         threading.Thread.__init__(self)
+
     def run(self):
-        while(True):
+        while (True):
             try:
                 print "Checking..."
-                #p = subprocess.Popen(["sudo ping -i 0.1 -w 2 -c 2 192.168.10.240"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
-                #out=p.stdout.read()
-                #print out
-                #regex = re.compile('100%')
-                #if len(regex.findall(out))!=0:
-                p = os.system("sudo ping -i 0.1 -w 2 -c 2 " + controller_ip) # This Line will block the thread.
-                if not p:
+                # p = subprocess.Popen(["sudo ping -i 0.1 -w 2 -c 2 192.168.10.240"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
+                # out=p.stdout.read()
+                # print out
+                # regex = re.compile('100%')
+                # if len(regex.findall(out))!=0:
+                p = os.system("sudo ping -i 0.5 -w 2 -c 2 " + controller_ip)  # This Line will block the thread.
+                if p != 0:
                     pwm.emergency_stop()
                     print "Shutting dowm motor..."
                 else:
@@ -37,13 +61,12 @@ class ConnectionWatcher(threading.Thread):
             except:
                 print "Can Not Check Connections!"
 
-class CommandHandler(StreamRequestHandler):
+
+class MyStreamRequestHandlerr(StreamRequestHandler):
     def handle(self):
-        # t = threading.Timer(5.0, self.sayhello)
-        # t.start()
+        t = threading.Timer(5.0, self.sayhello)
+        t.start()
         print "Incoming Connection!"
-        if not ('t' in dir()):
-            sayhello()
         if not ('Con' in dir()):
             Con = ConnectionWatcher()
             Con.start()
@@ -69,7 +92,7 @@ class CommandHandler(StreamRequestHandler):
 
                     elif data[0:2] == 's1':
                         print("---" + data.upper())
-                        pwm.servo1_set(float(data.split(",")[1]))  # 舵机设置
+                        pwm.servo_set(float(data.split(",")[1]))  # 舵机设置
             except KeyboardInterrupt:
                 traceback.print_exc()
                 self.server.shutdown()
@@ -94,7 +117,7 @@ if __name__ == "__main__":
     addr = (host, port)
     try:
         pwm = PiPWM()
-        server = ThreadingTCPServer(addr, CommandHandler)
+        server = ThreadingTCPServer(addr, MyStreamRequestHandlerr)
         print "Server Started Successfully! Waiting Connections!"
         server.serve_forever()
     except KeyboardInterrupt:
@@ -103,4 +126,3 @@ if __name__ == "__main__":
     server.server_close()
     pwm.stop()
     print "Done!"
-
